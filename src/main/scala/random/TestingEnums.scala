@@ -13,19 +13,35 @@ object NetworkCode extends Enumeration {
   val Athena             = Value(99999)
 }
 
+private object UsagePeriod extends Enumeration {
+  type UsagePeriod = Value
+
+  val MORNING   = Value("MORNING")
+  val AFTERNOON = Value("AFTERNOON")
+  val NIGHT     = Value("NIGHT")
+}
+
 object TestingEnums extends App {
 //  val testNC = NetworkCode.MTNZambia
 //  println(testNC)
 //  println(testNC.id)
 //  println(testNC.outerEnum)
 
-  val inputStr         = "*357*1*"
-  val inputParam       = inputStr.drop(1).stripSuffix("#")
-  val idx = inputParam.indexOf("*") match {
+  val inputStr   = "*357*1*"
+  val inputParam = inputStr.drop(1).stripSuffix("#")
+  val idx        = inputParam.indexOf("*") match {
     case -1 => inputStr.length
-    case x => x
+    case x  => x
   }
-  val input            = inputParam.drop(idx + 1)
+  val input      = inputParam.drop(idx + 1)
 
   println(input)
+
+  println(NetworkCode.MTNZambia)
+  println(NetworkCode.MTNZambia.id)
+  println(NetworkCode.MTNZambia.toString)
+
+  println(UsagePeriod.AFTERNOON)
+  println(UsagePeriod.AFTERNOON.id)
+  println(UsagePeriod.AFTERNOON.toString)
 }
