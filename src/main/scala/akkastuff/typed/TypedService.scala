@@ -1,16 +1,18 @@
 package akkastuff.typed
 
+import akka.{ Done => AkkaDone }
+import akka.actor.CoordinatedShutdown
 import akka.actor.typed.scaladsl.AskPattern._
-import akka.actor.typed.{ActorRef, ActorSystem, Behavior, Props, SpawnProtocol}
-import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
+import akka.actor.typed.{ ActorRef, ActorSystem, Behavior, Props, SpawnProtocol }
+import akka.actor.typed.scaladsl.{ ActorContext, Behaviors }
 import akka.util.Timeout
 import akkastuff.typed.CashOutServiceRegistry.timeout
-import akkastuff.typed.TypedService.{Event, InitiateCashOut}
-import akkastuff.typed.TypedServiceManager.{GetHandlerRequest, GetHandlerResponse, ManagerEvent}
+import akkastuff.typed.TypedService.{ Event, InitiateCashOut }
+import akkastuff.typed.TypedServiceManager.{ GetHandlerRequest, GetHandlerResponse, ManagerEvent }
 
 import java.util.concurrent.ConcurrentHashMap
 import scala.concurrent.duration.DurationInt
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ ExecutionContext, Future }
 import scala.util._
 
 object TypedService {
@@ -29,24 +31,40 @@ object TypedService {
     preferred_distance: Int
   ) extends Data
 
-  def apply(str: String): Behavior[Event] = {
-    initiate(Empty, str)
+  private var serviceId: String = ""
+
+  def apply(str: String): Behavior[Event] = Behaviors.setup { context =>
+    import scala.concurrent.ExecutionContext.Implicits.global
+    serviceId = str
+    CoordinatedShutdown(context.system)
+      .addTask(CoordinatedShutdown.PhaseBeforeServiceUnbind, "InteractionHandler ShutDown Task") { () =>
+        //        implicit val timeout: Timeout = Timeout(5.seconds)
+        val randomFut: Future[AkkaDone] = Future {
+          println("Shutting down TypedService, ID is [{}]...", serviceId)
+          AkkaDone
+        }
+        randomFut
+      }
+
+    initiate(Empty, str, context)
   }
 
-  private def initiate(data: Data, str: String): Behavior[Event] = Behaviors.receiveMessage[Event] { msg =>
-    (msg, data) match {
-      case (a @ InitiateCashOut(_), Empty) =>
-        //continue lines of code
-        println("While Initiating, processing: " + a)
-        initiate(Done, str)
-      case (a @ InitiateCashOut(_), Done) =>
-        //continue lines of code
-        println("While Initiating, Its now Done...")
-        done(Done)
-      case _     =>
-        println("While Unhandled, processing: ")
-        Behaviors.unhandled
-    }
+  private def initiate(data: Data, str: String, context: ActorContext[Event]): Behavior[Event] = Behaviors.receiveMessage[Event] {
+    msg =>
+      (msg, data) match {
+        case (a @ InitiateCashOut(_), Empty) =>
+          //continue lines of code
+          println("While Initiating, processing: " + a)
+          println(s"Service Id: $serviceId. Context Name: ${context.self.path.name}")
+          initiate(Done, str, context)
+        case (a @ InitiateCashOut(_), Done)  =>
+          //continue lines of code
+          println("While Initiating, Its now Done...")
+          done(Done)
+        case _                               =>
+          println("While Unhandled, processing: ")
+          Behaviors.unhandled
+      }
   }
 
   private def done(data: Data): Behavior[Event] = {
@@ -58,7 +76,7 @@ object TypedService {
     }
     Behaviors.receiveMessage[Event] { msg =>
       (msg, data) match {
-        case _     =>
+        case _ =>
           println("Received a request when DONE")
           Behaviors.unhandled
       }
@@ -70,6 +88,59 @@ object TypedService {
 //  }
 }
 
+class TypedServiceC {
+  private var serviceId: String           = ""
+  import TypedService._
+  def apply(str: String): Behavior[Event] = Behaviors.setup { context =>
+    import scala.concurrent.ExecutionContext.Implicits.global
+    serviceId = str
+    CoordinatedShutdown(context.system)
+      .addTask(CoordinatedShutdown.PhaseBeforeServiceUnbind, "InteractionHandler ShutDown Task") { () =>
+        //        implicit val timeout: Timeout = Timeout(5.seconds)
+        val randomFut: Future[AkkaDone] = Future {
+          println("Shutting down TypedService, ID is [{}]...", serviceId)
+          AkkaDone
+        }
+        randomFut
+      }
+    initiate(Empty, str, context)
+  }
+
+  private def initiate(data: Data, str: String, context: ActorContext[Event]): Behavior[Event] = Behaviors.receiveMessage[Event] {
+    msg =>
+      (msg, data) match {
+        case (a @ InitiateCashOut(_), Empty) =>
+          //continue lines of code
+          println("While Initiating, processing: " + a)
+          println(s"Service Id: $serviceId. Context Name: ${context.self.path.name}")
+          initiate(Done, str, context)
+        case (a @ InitiateCashOut(_), Done)  =>
+          //continue lines of code
+          println("While Initiating, Its now Done...")
+          done(Done)
+        case _                               =>
+          println("While Unhandled, processing: ")
+          Behaviors.unhandled
+      }
+  }
+
+  private def done(data: Data): Behavior[Event] = {
+    data match {
+      case Done =>
+        println("Hey! I'm done and saving the data!")
+      case _    =>
+        println("Ignoring...")
+    }
+    Behaviors.receiveMessage[Event] { msg =>
+      (msg, data) match {
+        case _ =>
+          println("Received a request when DONE")
+          Behaviors.unhandled
+      }
+    }
+  }
+}
+
 object TypedServiceManager {
   sealed trait ManagerEvent
   final case class GetHandlerRequest(customerAuthId: String, replyTo: ActorRef[GetHandlerResponse]) extends ManagerEvent
@@ -78,17 +149,17 @@ object TypedServiceManager {
     Behaviors.setup { ctx =>
       println("Starting TypedServiceManager...")
 //      ctx.log.info("Starting TypedServiceManager...")
-      Behaviors.receiveMessage {
-        case g: GetHandlerRequest =>
-          val handler = ctx.child(g.customerAuthId) match {
-            case Some(value) =>
-              value.asInstanceOf[ActorRef[TypedService.Event]]
-            case None =>
-              val handler = ctx.spawn(TypedService.apply(g.customerAuthId), g.customerAuthId)
-              handler
-          }
-          g.replyTo ! GetHandlerResponse(handler)
-          Behaviors.same
+      Behaviors.receiveMessage { case g: GetHandlerRequest =>
+        val handler = ctx.child(g.customerAuthId) match {
+          case Some(value) =>
+            value.asInstanceOf[ActorRef[TypedService.Event]]
+          case None        =>
+//            val handler = ctx.spawn(new TypedServiceC().apply(g.customerAuthId), g.customerAuthId)
+            val handler = ctx.spawn(TypedService.apply(g.customerAuthId), g.customerAuthId)
+            handler
+        }
+        g.replyTo ! GetHandlerResponse(handler)
+        Behaviors.same
       }
     }
 }
@@ -98,10 +169,12 @@ object NewService extends App {
   implicit val executionContext: ExecutionContext         = system.executionContext
 
   val fut = for {
-    serviceManager <- system.ask[ActorRef[ManagerEvent]](SpawnProtocol.Spawn(TypedServiceManager(), "TypedServiceManager", props = Props.empty, _))
-    handlerInfo1   <- serviceManager.ask[GetHandlerResponse](ref => GetHandlerRequest("1", ref))
-    handlerInfo2   <- serviceManager.ask[GetHandlerResponse](ref => GetHandlerRequest("2", ref))
-    handlerInfo3   <- serviceManager.ask[GetHandlerResponse](ref => GetHandlerRequest("1", ref))
+    serviceManager <- system.ask[ActorRef[ManagerEvent]](
+      SpawnProtocol.Spawn(TypedServiceManager(), "TypedServiceManager", props = Props.empty, _)
+    )
+    handlerInfo1 <- serviceManager.ask[GetHandlerResponse](ref => GetHandlerRequest("111", ref))
+    handlerInfo2 <- serviceManager.ask[GetHandlerResponse](ref => GetHandlerRequest("222", ref))
+    handlerInfo3 <- serviceManager.ask[GetHandlerResponse](ref => GetHandlerRequest("333", ref))
   } yield (handlerInfo1.handler, handlerInfo2.handler, handlerInfo3.handler)
 
   fut onComplete {
@@ -123,8 +196,8 @@ object NewService extends App {
       handlerTup._3 ! InitiateCashOut(
         payload = "Stuff"
       )
-    case Failure(ex)             =>
-        println("Something went wrong! " + ex)
+    case Failure(ex)         =>
+      println("Something went wrong! " + ex)
 //      system.log.error("Something went wrong! {}", ex)
   }
 }
@@ -132,11 +205,14 @@ object NewService extends App {
 object RunService extends App {
   implicit val system: ActorSystem[SpawnProtocol.Command] = ActorSystem(HelloWorldMain(), "helloSystem")
   implicit val executionContext: ExecutionContext         = system.executionContext
-  val actor1 = system.ask[ActorRef[TypedService.Event]](SpawnProtocol.Spawn(TypedService("abc"), "TypedService", props = Props.empty, _))
-  val actor2 = system.ask[ActorRef[TypedService.Event]](SpawnProtocol.Spawn(TypedService("efg"), "TypedService", props = Props.empty, _))
-  val actor3 = system.ask[ActorRef[TypedService.Event]](SpawnProtocol.Spawn(TypedService("hij"), "TypedService", props = Props.empty, _))
+  val actor1                                              =
+    system.ask[ActorRef[TypedService.Event]](SpawnProtocol.Spawn(TypedService("abc"), "TypedService", props = Props.empty, _))
+  val actor2                                              =
+    system.ask[ActorRef[TypedService.Event]](SpawnProtocol.Spawn(TypedService("efg"), "TypedService", props = Props.empty, _))
+  val actor3                                              =
+    system.ask[ActorRef[TypedService.Event]](SpawnProtocol.Spawn(TypedService("hij"), "TypedService", props = Props.empty, _))
 
-  val actorsFut = for {
+  val actorsFut                                           = for {
     a <- actor1
     b <- actor2
     c <- actor3
@@ -172,7 +248,7 @@ object HelloWorldMain {
 }
 
 object CashOutServiceRegistry {
-  type customerAuthId    = Int
+  type customerAuthId = Int
   private val handlerMap = new ConcurrentHashMap[customerAuthId, ActorRef[TypedService.Event]]
 
   implicit val timeout: Timeout = Timeout(3.seconds)

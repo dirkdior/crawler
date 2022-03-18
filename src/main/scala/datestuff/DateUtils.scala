@@ -1,6 +1,7 @@
 package datestuff
 
 import java.time._
+import java.time.temporal.ChronoUnit
 
 object DateUtils extends App {
 
@@ -13,6 +14,14 @@ object DateUtils extends App {
 //  val tomorrowMorning: LocalDateTime = todayMidnight.plusDays(1).plusHours(8)
   val tomorrowMorning: Instant          = todayMidnightZoned.plusDays(1).plusHours(8).toInstant
   val tomorrowEvening: LocalDateTime    = todayMidnight.plusDays(1).plusHours(20)
+  val tomorrow_8AM: Instant             = todayMidnightZoned.plusDays(1).plusHours(8).toInstant
+  val tomorrow_730AM: Instant           = todayMidnightZoned.plusDays(1).plusHours(7).plusMinutes(30).toInstant
+  val tomorrow_830AM: Instant           = todayMidnightZoned.plusDays(1).plusHours(8).plusMinutes(30).toInstant
+
+  def getSignedHoursBetween(closer_time: Instant, distant_time: Instant): Long   =
+    ChronoUnit.HOURS.between(closer_time, distant_time)
+  def getSignedMinutesBetween(closer_time: Instant, distant_time: Instant): Long =
+    ChronoUnit.MINUTES.between(closer_time, distant_time)
 
   println(
     s"MIDNIGHT $midnight \nTODAY $today \nTODAY MIDNIGHT $todayMidnight \nTOMORROW MORNING $tomorrowMorning \nTOMORROW EVENING $tomorrowEvening"
@@ -21,5 +30,12 @@ object DateUtils extends App {
   println(NOW)
 
   println(todayMidnightZoned)
+
+  println(
+    getSignedHoursBetween(tomorrow_8AM, tomorrow_830AM)
+  )
+  println(
+    getSignedHoursBetween(tomorrow_8AM, tomorrow_730AM)
+  )
 
 }
