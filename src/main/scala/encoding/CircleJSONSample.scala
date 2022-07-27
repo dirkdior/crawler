@@ -8,6 +8,8 @@ import io.circe.Codec
 import io.circe.generic.extras.Configuration
 import io.circe.generic.extras.semiauto.deriveEnumerationCodec
 
+import java.time.Instant
+
 object CircleJSONSample extends App {
 
   case class FAQs(
@@ -75,14 +77,17 @@ object MoreCirceExamples extends App {
     serialize(
       CurrentState(
         state         = MedicationReminder,
-        data          = RegistrationComplete(
-          surname     = "DD",
-          firstname   = "DD",
-          email       = "DD",
-          dob         = "DD",
-          phoneNumber = "DD"
+        data          = ActiveReminder(
+          regDetails = RegistrationComplete(
+            surname     = "a",
+            firstname   = "b",
+            email       = "c",
+            dob         = "e",
+            phoneNumber = "num"
+          )
         ),
-        event         = InvoiceUploadedByAdmin,
+        event         = UninitializedEvent,
+        lastReminder  = Uninitialized_FiredMedicationReminders,
         eventExecuted = false
       )
     )
@@ -94,6 +99,11 @@ object Resources {
   case class IncomingText(text: String) extends HandlerEvent
   case class IncomingImage(url: String) extends HandlerEvent
   object IncomingPayment extends HandlerEvent
+
+  sealed trait InternalEvent extends HandlerEvent
+  object UninitializedEvent extends InternalEvent
+  case class UserStateQueryResult(userState: Option[String]) extends InternalEvent
+  object NewRegistration extends InternalEvent
 
   sealed trait AdminInitiatedEvent extends HandlerEvent
   object InvoiceUploadedByAdmin extends AdminInitiatedEvent
@@ -107,10 +117,17 @@ object Resources {
   case class MedicationTakenConfirmation(period: UsagePeriod.Value) extends MedicationReminderEvent
 //  case class MedicationTakenConfirmation(period: String) extends MedicationReminderEvent
 
+  sealed trait FiredMedicationReminders extends MedicationReminderEvent
+  case class MorningReminderFired(date: Instant) extends FiredMedicationReminders
+  case class AfternoonReminderFired(date: Instant) extends FiredMedicationReminders
+  case class NightReminderFired(date: Instant) extends FiredMedicationReminders
+  object Uninitialized_FiredMedicationReminders extends FiredMedicationReminders
+
   sealed trait PromptEvent extends HandlerEvent
   object RetryReminderScheduling extends PromptEvent
 
   sealed trait HandlerData
+  object UninitializedData extends HandlerData
   sealed trait RegistrationData extends HandlerData
   sealed trait PrescriptionUploadData extends HandlerData
   sealed trait SubscriptionData extends HandlerData
@@ -152,7 +169,8 @@ object Resources {
   ) extends ReminderData
 
   sealed trait HandlerState
-  case object Routing extends HandlerState
+  object UninitializedState extends HandlerState
+  object Routing extends HandlerState
   object Registration extends HandlerState
   object PrescriptionUpload extends HandlerState
   object PreSubscription extends HandlerState
@@ -173,7 +191,9 @@ object Resources {
     state: HandlerState,
     data: HandlerData,
     event: HandlerEvent,
-    eventExecuted: Boolean
+    lastReminder: FiredMedicationReminders,
+    eventExecuted: Boolean,
+    lastHourlyReminder: Instant = Instant.now()
   )
 
   object UsagePeriod extends Enumeration {

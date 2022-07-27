@@ -21,6 +21,7 @@ libraryDependencies += "com.typesafe.akka" %% "akka-actor-typed"     % akkaVersi
 libraryDependencies += "commons-codec"      % "commons-codec"        % "1.15"
 libraryDependencies += "com.github.t3hnar" %% "scala-bcrypt"         % "4.1"
 libraryDependencies += "com.typesafe.akka" %% "akka-stream-kafka"    % alpakkaVersion
+libraryDependencies += "org.scalatest"     %% "scalatest"            % "3.2.12" % Test
 libraryDependencies ++= Seq(
   "io.circe" %% "circe-core",
   "io.circe" %% "circe-generic",
